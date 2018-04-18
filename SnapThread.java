@@ -1,40 +1,88 @@
-import static com.googlecode.javacv.cpp.opencv_highgui.*;
-import static com.googlecode.javacv.cpp.opencv_core.*;
-import static com.googlecode.javacv.cpp.opencv_imgproc.*;
+package phase_two;
 
-import java.awt.AWTException;
+import static com.googlecode.javacv.cpp.opencv_core.cvCreateImage;
+import static com.googlecode.javacv.cpp.opencv_core.cvFlip;
+import static com.googlecode.javacv.cpp.opencv_core.cvInRangeS;
+import static com.googlecode.javacv.cpp.opencv_core.cvPoint;
+import static com.googlecode.javacv.cpp.opencv_core.cvRect;
+import static com.googlecode.javacv.cpp.opencv_core.cvRectangle;
+import static com.googlecode.javacv.cpp.opencv_core.cvScalar;
+import static com.googlecode.javacv.cpp.opencv_core.cvSplit;
+import static com.googlecode.javacv.cpp.opencv_core.cvSub;
+import static com.googlecode.javacv.cpp.opencv_imgproc.CV_BGR2HSV;
+import static com.googlecode.javacv.cpp.opencv_imgproc.CV_CHAIN_APPROX_SIMPLE;
+import static com.googlecode.javacv.cpp.opencv_imgproc.CV_GAUSSIAN;
+import static com.googlecode.javacv.cpp.opencv_imgproc.CV_MEDIAN;
+import static com.googlecode.javacv.cpp.opencv_imgproc.CV_RETR_CCOMP;
+import static com.googlecode.javacv.cpp.opencv_imgproc.CV_RGB2GRAY;
+import static com.googlecode.javacv.cpp.opencv_imgproc.CV_THRESH_BINARY;
+import static com.googlecode.javacv.cpp.opencv_imgproc.cvBoundingRect;
+import static com.googlecode.javacv.cpp.opencv_imgproc.cvCvtColor;
+import static com.googlecode.javacv.cpp.opencv_imgproc.cvFindContours;
+import static com.googlecode.javacv.cpp.opencv_imgproc.cvSmooth;
+import static com.googlecode.javacv.cpp.opencv_imgproc.cvThreshold;
+
 import java.awt.Frame;
 import java.awt.Graphics;
 import java.awt.Rectangle;
-import java.awt.Robot;
-import java.awt.TrayIcon;
-import java.awt.event.InputEvent;
-import java.awt.event.ItemEvent;
-import java.awt.event.KeyAdapter;
-import java.awt.event.KeyEvent;
 
-import org.opencv.core.CvType;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 import com.googlecode.javacpp.Loader;
+import com.googlecode.javacv.OpenCVFrameGrabber;
 import com.googlecode.javacv.cpp.opencv_core;
+import com.googlecode.javacv.cpp.opencv_core.CvContour;
 import com.googlecode.javacv.cpp.opencv_core.CvMat;
+import com.googlecode.javacv.cpp.opencv_core.CvMemStorage;
+import com.googlecode.javacv.cpp.opencv_core.CvRect;
+import com.googlecode.javacv.cpp.opencv_core.CvScalar;
+import com.googlecode.javacv.cpp.opencv_core.CvSeq;
 import com.googlecode.javacv.cpp.opencv_core.IplImage;
 
-public class SnapThread extends Thread
+@SuppressWarnings("serial")
+public class SnapThread extends Frame implements Runnable
 {
-	final private int red=1;
-	final private int green=2;
-	final private int blue=3;
-	private IplImage image;
-	private Robot robot;
-	private int x,y;
-	static int state;
-	static Graphics g;
-	Frame f;
 	
+	private IplImage image;
+	static int state;
+	public static Graphics g;
+	Frame f;
+	public MouseMover mover;
+	
+	OpenCVFrameGrabber grabber;
 	public SnapThread()
 	{
-		try{	robot=new Robot();	}catch(Exception e){}
+		grabber = new OpenCVFrameGrabber(0);
+
+		grabber.setImageHeight(788);
+		grabber.setImageWidth(1024);
+		try {
+			grabber.start();
+			
+			image = grabber.grab();
+		} catch (com.googlecode.javacv.FrameGrabber.Exception e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		setSize(image.width(), image.height());
+//		 addWindowListener(this);
+		setSize(image.width(),image.height());
+		 setVisible(true);
+		 g=getGraphics();
+		 setLocation(0,0);
+		 addWindowListener(
+				 new WindowAdapter() {
+					
+					 public void windowClosing(WindowEvent e)
+					 {
+						 System.exit(0);
+					 }
+				}
+				 );
+		try{	
+			mover=new MouseMover();
+		}catch(Exception e){}
 	}
 	public void run()
 	{
@@ -54,14 +102,14 @@ public class SnapThread extends Thread
 //        		}
 //        	}
 //        });
-		CvCapture capture = cvCreateCameraCapture(0);
+		
 		//grabber.setImageHeight(786);
 		//grabber.setImageWidth(1366);
 		try
 		{	
 			while(true)
 			{
-				image = cvRetrieveFrame(capture);
+				image = grabber.grab();
 				if(image!=null)
 				{
 					cvFlip(image, image, 1);	
@@ -109,6 +157,7 @@ public class SnapThread extends Thread
 			        cvInRangeS(imgHSV, rmin,rmax, bin_red);
 			        cvSmooth(bin_red, bin_red, CV_MEDIAN, 25);
 			        cvSmooth(bin_red, bin_red, CV_GAUSSIAN, 5);
+			       
 //-----------------------------------------------------------------------------------------------------------------					
 					
 //			            IplImage imgHSVg = cvCreateImage(image.cvSize(), image.depth(), 3); 
@@ -127,15 +176,16 @@ public class SnapThread extends Thread
 					if(cursor!=null)
 					{
 						//SnapStart.trayIcon.displayMessage("SnapGest","Blue detected.", TrayIcon.MessageType.INFO);
-						double scalex=(float)cursor.x()/1366;
-						double scaley=(float)cursor.y()/768;
-						double factorx=scalex*cursor.x();
-						double factory=scaley*cursor.y();
-						int x=cursor.x()-20 + (int)factorx*3;
-						int y=cursor.y()-20 + (int)factory*3;
-						robot.mouseMove(x, y);
-						if(y<2)robot.mouseWheel(-2);
-						if(y>766)robot.mouseWheel(2);
+//						double scalex=(float)cursor.x()/1366;
+//						double scaley=(float)cursor.y()/768;
+//						double factorx=scalex*cursor.x();
+//						double factory=scaley*cursor.y();
+						int x=cursor.x();//-20 + (int)factorx*3;
+						int y=cursor.y();//-20 + (int)factory*3;
+//						robot.mouseMove(x, y);
+						mover.mouseMove(x, y);
+//						if(y<2)robot.mouseWheel(-2);
+//						if(y>766)robot.mouseWheel(2);
 						//cvRectangle( image, cvPoint( cursor.x()+(int)factor*3, cursor.y() ), cvPoint( cursor.x()+(int)factor + 10, cursor.y() + 10),CvScalar.BLUE, 0, 0, 0 );
 					}
 //------------------------------------------------------------------------------------------------------------------						
@@ -149,16 +199,16 @@ public class SnapThread extends Thread
 						{
 							System.out.println("click");
 //							robot.mouseWheel(10);
-							robot.mousePress(InputEvent.BUTTON1_MASK);
+//							robot.mousePress(InputEvent.BUTTON1_MASK);
 						}
-						else
-							
-							robot.mouseRelease(InputEvent.BUTTON1_MASK);
+						//else
+//							System.out.println("Release");
+//							robot.mouseRelease(InputEvent.BUTTON1_MASK);
 					}
 //---------------------------------------------------------------------------------------------------------------		
 					//cvSaveImage("a.jpg", bin_blue);
-					if(state==ItemEvent.SELECTED)
-				    	g.drawImage(image.getBufferedImage(), 0, 0, 1024, 768, null);
+//					if(state==ItemEvent.SELECTED)
+//				    	g.drawImage(image.getBufferedImage(), 0, 0, 1024, 788, null);
 //---------------------------------------------------------------------------------------------------------------------------					
 				    blue.release();
 				    gray.release();
